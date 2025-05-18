@@ -1,0 +1,75 @@
+s small 5 169.932542ms
+s small 5 167.553542ms
+s small 5 164.7015ms
+s small 5 168.148167ms
+s small 5 165.943959ms
+s medium 5 1.289938042s
+s medium 5 1.280120333s
+s medium 5 1.298415125s
+s medium 5 1.288813541s
+s medium 5 1.292454375s
+s big 5 11.525544292s
+s big 5 11.6008545s
+s big 5 11.607808042s
+s big 5 11.577190291s
+s big 5 11.626286375s
+ps small 5 137.086792ms 2
+ps small 5 136.584167ms 2
+ps small 5 138.580959ms 2
+ps small 5 136.042167ms 2
+ps small 5 136.530708ms 2
+ps medium 5 1.057130209s 2
+ps medium 5 1.057002792s 2
+ps medium 5 1.071515791s 2
+ps medium 5 1.067601709s 2
+ps medium 5 1.059272375s 2
+ps big 5 9.646220958s 2
+ps big 5 9.672222875s 2
+ps big 5 9.8613845s 2
+ps big 5 9.649103459s 2
+ps big 5 9.663729958s 2
+ps small 5 76.479625ms 4
+ps small 5 79.713458ms 4
+ps small 5 74.201333ms 4
+ps small 5 73.409708ms 4
+ps small 5 80.316333ms 4
+ps medium 5 466.96775ms 4
+ps medium 5 471.950625ms 4
+ps medium 5 466.805375ms 4
+ps medium 5 490.47575ms 4
+ps medium 5 467.570542ms 4
+ps big 5 4.089613625s 4
+ps big 5 4.048445958s 4
+ps big 5 4.127375084s 4
+ps big 5 4.126021125s 4
+ps big 5 4.095222958s 4
+ps small 5 74.025916ms 6
+ps small 5 71.941833ms 6
+ps small 5 74.070667ms 6
+ps small 5 77.367ms 6
+ps small 5 74.544166ms 6
+ps medium 5 405.183084ms 6
+ps medium 5 418.833917ms 6
+ps medium 5 411.39125ms 6
+ps medium 5 433.173875ms 6
+ps medium 5 426.991334ms 6
+ps big 5 3.623428667s 6
+ps big 5 3.651234041s 6
+ps big 5 3.716875708s 6
+ps big 5 3.802107875s 6
+ps big 5 3.823268542s 6
+ps small 5 72.713708ms 8
+ps small 5 71.708083ms 8
+ps small 5 69.710125ms 8
+ps small 5 72.239291ms 8
+ps small 5 72.577291ms 8
+ps medium 5 387.35125ms 8
+ps medium 5 395.332375ms 8
+ps medium 5 393.801333ms 8
+ps medium 5 389.99175ms 8
+ps medium 5 396.34475ms 8
+ps big 5 3.409039042s 8
+ps big 5 3.460267833s 8
+ps big 5 3.491523875s 8
+ps big 5 3.508116084s 8
+ps big 5 3.5302875s 8

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.3.330">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>report</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="report_files/libs/clipboard/clipboard.min.js"></script>
+<script src="report_files/libs/quarto-html/quarto.js"></script>
+<script src="report_files/libs/quarto-html/popper.min.js"></script>
+<script src="report_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="report_files/libs/quarto-html/anchor.min.js"></script>
+<link href="report_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="report_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="report_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="report_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="report_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+</head>
+
+<body class="fullcontent">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+
+
+<section id="mpcs-52060---parallel-programming-project-3-report" class="level1">
+<h1>MPCS 52060 - Parallel Programming: Project 3 Report</h1>
+<section id="paralellizing-co-occurrence-matrices-for-natural-language-processing" class="level2">
+<h2 class="anchored" data-anchor-id="paralellizing-co-occurrence-matrices-for-natural-language-processing">Paralellizing Co-occurrence matrices for Natural Language Processing</h2>
+<p><strong>Author:</strong> Zander Meitus<br>
+<strong>Due Date:</strong> May 23, 2023</p>
+</section>
+<section id="contents" class="level2">
+<h2 class="anchored" data-anchor-id="contents">Contents</h2>
+<ul>
+<li>Overview
+<ul>
+<li>Definitions<br>
+</li>
+<li>Challengs &amp; Hot spots<br>
+</li>
+</ul></li>
+<li>Data setup
+<ul>
+<li>Synopsis data<br>
+</li>
+<li>Vocabulary<br>
+</li>
+</ul></li>
+<li>Implementation
+<ul>
+<li>Sequential<br>
+</li>
+<li>Work Stealing<br>
+</li>
+<li>Work Balancing</li>
+</ul></li>
+<li>Experiments &amp; Analysis
+<ul>
+<li>Machine Specifications<br>
+</li>
+<li>Results<br>
+</li>
+</ul></li>
+<li>Interface Note<br>
+</li>
+<li>Thank you!</li>
+</ul>
+</section>
+<section id="overview" class="level2">
+<h2 class="anchored" data-anchor-id="overview">Overview</h2>
+<section id="definitions" class="level3">
+<h3 class="anchored" data-anchor-id="definitions">Definitions</h3>
+<p>Co-occurrence matrices are a fundamental technique for analyzing text and are a key component of some word-vector embeddings approaches such as (LSA) and Global Vector Embeddings (GloVe). To understand the concept of a co-occurence matrix, it is important to first define some terms:<br>
+- corpus: a complete collection of text to be analyzed<br>
+- e.g., a set of movie synopses.<br>
+- document: a discrete unit of text within the corpus<br>
+- e.g., an individual movie synopsis.<br>
+- context: for a given word in a given document, the context<br>
+- e.g., in a movie synopsis, the context may be the sentence a word appears in, or a sliding window of the previous <span class="math inline">\(k\)</span> words in the synopsis for the <span class="math inline">\(i^{th}\)</span> word.<br>
+- vocabularly: a set of words of interest to be considered in the co-occurrence matrix</p>
+<p>Let <span class="math inline">\(V\)</span> be the vocabularly of interest. The co-occurrence matrix <span class="math inline">\(C\)</span> will be of size <span class="math inline">\(n x n\)</span>, where, <span class="math inline">\(|V| = n\)</span>. The value in row <span class="math inline">\(i\)</span> and column <span class="math inline">\(j\)</span> of <span class="math inline">\(V\)</span> (<span class="math inline">\(V_{ij}\)</span>) is how many times word <span class="math inline">\(v_j\)</span> appears in the context of word <span class="math inline">\(v_i\)</span> across the documents in the corpus.</p>
+<p>For example, take a corpus of the sentences below, where each of the sentences is a document and the context for a given word incudes the prior 2 words (<span class="math inline">\(k=2\)</span>) in a document.</p>
+<p>“I like dogs.” “Dogs like food.” “Do cats like dogs?”</p>
+<p>For this example, the vocabularly <span class="math inline">\(V\)</span> is defined as all unique words in the corpus: <span class="math display">\[V = \{I, like, dogs, food, do, cats\}\]</span> <span class="math display">\[|V| = 6\]</span></p>
+<p>The co-occurrence matrix <span class="math inline">\(C\)</span> for this corpus and context size is:</p>
+<table class="table">
+<thead>
+<tr class="header">
+<th></th>
+<th>I</th>
+<th>like</th>
+<th>dogs</th>
+<th>food</th>
+<th>do</th>
+<th>cats</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>I</strong></td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td><strong>like</strong></td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td><strong>dogs</strong></td>
+<td>1</td>
+<td>2</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td><strong>food</strong></td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td><strong>do</strong></td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td><strong>cats</strong></td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>The entry <span class="math inline">\(C_{3,2}\)</span> is 2 because the word “like” appears in the context of the word dog twice: once in the first document (sentence) and once in the last document. Notice for a sliding context window, the matrix is not symmetric. For example, <span class="math inline">\(C_{43} = 1 \neq C_{34} =0\)</span>.</p>
+</section>
+<section id="challenges-hot-spots" class="level3">
+<h3 class="anchored" data-anchor-id="challenges-hot-spots">Challenges &amp; Hot spots</h3>
+<p>Beyond the fundamental utility of co-occurence matrices in many areas of natural language processing, one main challenge for implementing a parallel system is the large memory footprint. Assuming 8 bytes per cell and a vocabulary of 170,000 words (the <a href="https://englishlive.ef.com/blog/language-lab/many-words-english-language/">approximate number</a> of words in the Oxford English Dictionary that are in current use), the co-occurence matrix would be over 230GB. If we wish to parallelize this calculation, that is a lot of data to replicate or synchornize accross.</p>
+<p>There are 3 main hot spots in the construction of co-occurrence matrices: 1) Processing each document into a format where word co-occurences can be tabulated.<br>
+2) The calclation of the co-occurrences within a given document.<br>
+3) Aggregating co-occurrences across documents.</p>
+<ol start="2" type="1">
+<li>and 3) seem to lend themselves to a map-reduce pattern and I was interested to practice this pattern more.</li>
+</ol>
+</section>
+</section>
+<section id="data-setup" class="level2">
+<h2 class="anchored" data-anchor-id="data-setup">Data setup</h2>
+<section id="synopsis-data" class="level3">
+<h3 class="anchored" data-anchor-id="synopsis-data">Synopsis data</h3>
+<p>Data comes from the <a href="https://ritual.uh.edu/mpst-2018/">Movie Plot Synopsis with Tags (MPST)</a> dataset and accessed via <a href="https://www.kaggle.com/datasets/cryptexcode/mpst-movie-plot-synopses-with-tags">Kaggle</a> (dataset posted by one of original authors). The dataset contain synopses for over 14,000 movies from either wikipedia or imdb. I then process the data into three samples of of 100, 1,000, and 10,000 movies using the script <code>proj3/util/create_data_files.py</code>. The files can be recreated using the following command from the <code>util</code> directory:<br>
+<code>&gt;python create_data_files.py 100 1000 10000</code> The script outputs json files for each sample size, with a single sample of the form<br>
+<code>{"Id": &lt;movie id string&gt;, "Title": &lt;movie title string&gt;, "Text":&lt;movie synopsis string&gt;}</code></p>
+</section>
+<section id="vocabulary" class="level3">
+<h3 class="anchored" data-anchor-id="vocabulary">Vocabulary</h3>
+<p>Co-occurrence matrices are often limited to a subset vocabularly that is not the full vocabularly observed in the corpus nor the full vocabularly of a given language. In this setting, I will limit the vocabularly to a subset of the <span class="math inline">\(p\)</span> most frequent words in the corpus. Here, <span class="math inline">\(p=5000\)</span>. I generate the vocabulary of interest in <code>proj3/util/get_vocab.py</code>. The files can be recreated using the following command from the <code>util</code> directory:<br>
+<code>&gt;python get_vocab.py 5000</code></p>
+</section>
+</section>
+<section id="implementation" class="level2">
+<h2 class="anchored" data-anchor-id="implementation">Implementation</h2>
+<section id="sequential" class="level3">
+<h3 class="anchored" data-anchor-id="sequential">Sequential</h3>
+<p>The sequential version first initializes a co-occurrence matrix struct (specified in the <code>cooc</code> package) and loads the vocabulary. It then reads in the specified json file, decodes the json to a <code>Document</code> struct and appends enqueues the document to the global queue. The program then main thread then iterates over the global queue, dequeing a document and calculating the context counts for each pair of word-context word in that document. Only when both the word and context word appear in the vocabulary discussed above is the pair counted.</p>
+<p>“Tokenization” is an important step where a string is converted to a slice of tokens, enabling the counting of context token pairs. There are many types of tokenization. This implementation uses a basic form of converting all characters to lower case and splitting strings by spaces.</p>
+</section>
+<section id="work-stealing" class="level3">
+<h3 class="anchored" data-anchor-id="work-stealing">Work Stealing</h3>
+<p>THe work stealing implementation starts in a similar fashion by sequentially decoding the document jsons to <code>Documents</code>. However, instead of a normal queue, the work stealing method implements a channel. An array of double-ended queue (DEQ) arrays is then created, where there are <span class="math inline">\(w-1\)</span> DEQ arrays. <span class="math inline">\(w\)</span> is the number of available workers. The documents are then distributed among the <span class="math inline">\(w-1\)</span> workers to perform the co-occurrence mapping and place the result in another channel. Once a a worker exhausts its queue, it sets a <code>CriminalFlag</code> and begins stealing from other workers’ queues that are not empty. Once all workers have exhausted their queues at least once, the workers stop processing.</p>
+<p>The one remaining worker iterates over the results channel as the other workers are adding to it and reduces them into the final co-occurrence matrix, completing the Map-Reduce pattern.</p>
+</section>
+<section id="work-balancing" class="level3">
+<h3 class="anchored" data-anchor-id="work-balancing">Work Balancing</h3>
+<p>The work balancing algorithm functions as the work stealing algorithm with the exception of how each worker iterates over its local queue. After every 5th document a workers processes from its local queue, it will flip a biased coin with probability <span class="math inline">\(\frac{1}{|Q|}\)</span>, where <span class="math inline">\(|Q|\)</span> is the number of documents remaining in the local queue. If the flip returns <code>true</code>, the worker will select a victim that still has work remaining and compare the lengths of their queues. If the absolute difference is equal to or greater than the <code>thresholdBalance</code>, then the worker with less work will steal the number of documents equal to half the difference (rounded down). For this analysis, the <code>thresholdBalance</code> was set to 5</p>
+</section>
+</section>
+<section id="experiments-analysis" class="level2">
+<h2 class="anchored" data-anchor-id="experiments-analysis">Experiments &amp; Analysis</h2>
+<section id="machine-specifications" class="level3">
+<h3 class="anchored" data-anchor-id="machine-specifications">Machine Specifications</h3>
+<p>I ran these experiments on a 2020 MacBook Air with an M1 chip with 8 processors (4 CPU, 4 GPU) and 16GB of memory. The operating system is MacOS Monterey version 12.6.</p>
+</section>
+<section id="experiments" class="level3">
+<h3 class="anchored" data-anchor-id="experiments">Experiments</h3>
+<p>The speedup experiements were run on the <code>big</code> corpus of 10,000 movie reviews with a context window size of the 5 words preceding a word. The vocabularly size was the 5,000 words that appeared most frequently in the MPST dataset. The parallel versions were run with 2, 4, 6 and 8 cores. The work balancing algorithm was run with a <code>balanceThreshold</code> of 5. The experiments can be replicated by running <code>./speedup.sh</code> on the command line from the <code>proj3</code> directory. The usage is as follows if you wish to run different specifications of the model than what is in the shell script for the experiments: <code>Usage: go run main.go &lt;mode (s/ps/pb)&gt; &lt;corpus (small/medium/big)&gt; &lt;vocabSize (500/1000/5000)&gt; &lt;windowSize&gt; &lt;capacity&gt; &lt;balanceThreshold&gt;"</code></p>
+</section>
+<section id="results" class="level3">
+<h3 class="anchored" data-anchor-id="results">Results</h3>
+<p>Across all three corpuses, the parallelized versions demonstrated increasing speedup as the number of threads was increased over the sequential version, as seen in the charts below.<br>
+<img src="worksteal_speedup.png" class="img-fluid" alt="worksteal"></p>
+<p><img src="workbalance_speedup.png" class="img-fluid" alt="workbalance"><br>
+There are several important details within these trends. First, the speedup is well below the number of threads. This is likely due to the fact that part of the problem is not parallelized. Hot spot 1, where each document is pre-processed before it is assigned to workers, is sequential in all versions. To improve the experiment, I could have either parallelized this as well, or limited the speedup analysis to the parallelized portions.</p>
+<p>Also, while each corpus shows gains in speedup with more threads, the gains with a given number of threads are marginally decreasing as the size of the corpus increases. One possible reason for this is that only a single worker is reducing from the results channel. As more workers are adding map results to the channel, the reducing worker may be overwhelmed and become a rate-limiting step. To resolve this problem, I could try a fork-join pattern where all workers map documents, and then each worker calculates a local reduction of the results from its own queue.</p>
+<p>Finally, the two parallel algorithms exhibit nearly identical speedup. One possible explanation is that data distribution leads to naturally well-balanced threads. For example, if each document has a similar number of words, the processing rate for each thread should also be similar and there should not be much balancing or stealing required.</p>
+</section>
+</section>
+<section id="interface-note" class="level2">
+<h2 class="anchored" data-anchor-id="interface-note">Interface Note</h2>
+<p>I did not implement the <code>ExecutorService</code> interface. I was a little confused about the implementation with the different levels of queues/channels, and between finishing school, buying a new house, and moving out of the state during week 9/finals week, I didn’t take the time to figure it out completely. However, I wanted to write some thoughts on how I think I would have gone about it had I been able to figure it out.</p>
+<p>It seems to me that the main purpose of the interface is for decoupling. Many of us are implementing distinct projects, and the interface allows abstraction to the core components. Looking at the examples, each document in the corpus would have been a task. The executor service would have contained the global queue and local queue. I could have set the mapping of word-context word pairs as a callable or runable function: callable if it would return the co-occurrence map and runnable if the co-occurence maps were added to a channel in context but not actually returned. I am not sure if the reducing component would be contained within the executor service or not.</p>
+</section>
+<section id="thank-you" class="level2">
+<h2 class="anchored" data-anchor-id="thank-you">Thank you!</h2>
+<p>I was motivated to take this class from a professional experience where my team was working on parallelizing a recommendation algorithm and I was envious of my teammates with deeper knowledge in parallel computing. I have found the class to be very enjoyable and challenging, and I think I’ve met the goals I set out to achieve. Thank you for a wonderful course. This project was a lot of fun and definitely a highlight of my graduate career.</p>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button', {
+    text: function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+  });
+  clipboard.on('success', function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  });
+  function tippyHover(el, contentFn) {
+    const config = {
+      allowHTML: true,
+      content: contentFn,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start'
+    };
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      return note.innerHTML;
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+</body></html>

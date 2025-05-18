@@ -1,0 +1,2 @@
+go run main.go s small 500 3
+go run main.go ps small 500 3 2
