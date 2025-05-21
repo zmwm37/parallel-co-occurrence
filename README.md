@@ -18,7 +18,6 @@
     - Machine Specifications  
     - Results  
 - Interface Note  
-- Thank you!  
 
 ## Overview
 ### Definitions  
@@ -64,8 +63,7 @@ There are 3 main hot spots in the construction of co-occurrence matrices:
 1) Processing each document into a format where word co-occurences can be tabulated.  
 2) The calclation of the co-occurrences within a given document.  
 3) Aggregating co-occurrences across documents.  
-
-2) and 3) seem to lend themselves to a map-reduce pattern and I was interested to practice this pattern more. 
+4) 2 and 3 seem to lend themselves to a map-reduce pattern and I was interested to practice this pattern more. 
 
 ## Data setup  
 ### Synopsis data
@@ -80,14 +78,14 @@ Co-occurrence matrices are often limited to a subset vocabularly that is not the
 
 ## Implementation
 ### Sequential
-The sequential version first initializes a co-occurrence matrix struct (specified in the `cooc` package) and loads the vocabulary. It then reads in the specified json file, decodes the json to a `Document` struct and appends enqueues the document to the global queue. The program then main thread then iterates over the global queue, dequeing a document and calculating the context counts for each pair of word-context word in that document. Only when both the word and context word appear in the vocabulary discussed above is the pair counted.  
+The sequential version first initializes a co-occurrence matrix struct (specified in the `cooc` package) and loads the vocabulary. It then reads in the specified json file, decodes the json to a `Document` struct and appends enqueues the document to the global queue. The main thread then iterates over the global queue, dequeing a document and calculating the context counts for each pair of word-context word in that document. Only when both the word and context word appear in the vocabulary discussed above is the pair counted.  
 
 "Tokenization" is an important step where a string is converted to a slice of tokens, enabling the counting of context token pairs. There are many types of tokenization. This implementation uses a basic form of converting all characters to lower case and splitting strings by spaces. 
 
 ### Work Stealing  
 THe work stealing implementation starts in a similar fashion by sequentially decoding the document jsons to `Documents`. However, instead of a normal queue, the work stealing method implements a channel. An array of double-ended queue (DEQ) arrays is then created, where there are $w-1$ DEQ arrays. $w$ is the number of available workers.  The documents are then distributed among the $w-1$ workers to perform the co-occurrence mapping and place the result in another channel. Once a a worker exhausts its queue, it sets a `CriminalFlag` and begins stealing from other workers' queues that are not empty. Once all workers have exhausted their queues at least once, the workers stop processing.
 
- The one remaining worker iterates over the results channel as the other workers are adding to it and reduces them into the final co-occurrence matrix, completing the Map-Reduce pattern.  
+The one remaining worker iterates over the results channel as the other workers are adding to it and reduces them into the final co-occurrence matrix, completing the Map-Reduce pattern.  
 
 ### Work Balancing
 The work balancing algorithm functions as the work stealing algorithm with the exception of how each worker iterates over its local queue. After every 5th document a workers processes from its local queue, it will flip a biased coin with probability $\frac{1}{|Q|}$, where $|Q|$ is the number of documents remaining in the local queue. If the flip returns `true`, the worker will select a victim that still has work remaining and compare the lengths of their queues. If the absolute difference is equal to or greater than the `thresholdBalance`, then the worker with less work will steal the number of documents equal to half the difference (rounded down). For this analysis, the `thresholdBalance` was set to 5
